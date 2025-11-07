@@ -1,0 +1,14 @@
+module github.com/hellobchain/oss-go-sdk
+
+go 1.20
+
+require (
+	github.com/aliyun/aliyun-oss-go-sdk v3.0.2+incompatible
+	github.com/aws/aws-sdk-go v1.55.8
+)
+
+require (
+	github.com/jmespath/go-jmespath v0.4.0 // indirect
+	golang.org/x/time v0.14.0 // indirect
+	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
+)
