@@ -20,6 +20,11 @@ type aliClient struct {
 	bucket string
 }
 
+// SetBucket implements ossclient.OssClient.
+func (c *aliClient) SetBucket(bucket string) {
+	c.bucket = bucket
+}
+
 func NewAliClient(accessKey, secretKey, endpoint, region, bucket string) (ossclient.OssClient, error) {
 	cli, err := oss.New(endpoint, accessKey, secretKey)
 	if err != nil {
@@ -28,12 +33,13 @@ func NewAliClient(accessKey, secretKey, endpoint, region, bucket string) (osscli
 	if region == "" {
 		cli.SetRegion(region)
 	}
+	aliClient := &aliClient{cli: cli, bucket: bucket}
 	if bucket != "" {
-		if err := cli.CreateBucket(bucket, oss.StorageClass(oss.StorageStandard)); err != nil {
+		if aliClient.EnsureBucketExists(context.Background(), bucket) != nil {
 			return nil, err
 		}
 	}
-	return &aliClient{cli: cli, bucket: bucket}, nil
+	return aliClient, nil
 }
 
 func (c *aliClient) Upload(ctx context.Context, bucket, object string, data []byte, _ ...ossclient.UploadOpt) error {

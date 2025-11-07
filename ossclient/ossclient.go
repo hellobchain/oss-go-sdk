@@ -17,6 +17,7 @@ type OssClient interface {
 	EnsureBucketExists(ctx context.Context, bucket string) error
 	GetObjectInfo(ctx context.Context, bucket, object string) (*ObjectInfo, error)
 	DeleteObject(ctx context.Context, bucket, object string) error
+	SetBucket(bucket string)
 }
 
 /*---------- 空选项占位 ----------*/

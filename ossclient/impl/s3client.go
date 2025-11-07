@@ -21,6 +21,11 @@ type s3Client struct {
 	bucket string
 }
 
+// SetBucket implements ossclient.OssClient.
+func (c *s3Client) SetBucket(bucket string) {
+	c.bucket = bucket
+}
+
 func NewS3Client(accessKey, secretKey, endpoint, region, bucket string) (ossclient.OssClient, error) {
 	// 自动识别 PathStyle
 	u, _ := url.Parse(endpoint)
@@ -36,12 +41,13 @@ func NewS3Client(accessKey, secretKey, endpoint, region, bucket string) (ossclie
 		return nil, err
 	}
 	svc := s3.New(sess)
+	s3Client := &s3Client{svc: svc, bucket: bucket}
 	if bucket != "" {
-		if _, err := svc.CreateBucket(&s3.CreateBucketInput{Bucket: aws.String(bucket)}); err != nil {
+		if s3Client.EnsureBucketExists(context.Background(), bucket) != nil {
 			return nil, err
 		}
 	}
-	return &s3Client{svc: svc, bucket: bucket}, nil
+	return s3Client, nil
 }
 
 func (c *s3Client) Upload(ctx context.Context, bucket, object string, data []byte, _ ...ossclient.UploadOpt) error {
