@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/aliyun/aliyun-oss-go-sdk/oss"
+	"github.com/hellobchain/oss-go-sdk/common/errors"
 	"github.com/hellobchain/oss-go-sdk/ossclient"
 )
 
@@ -57,6 +58,9 @@ func (c *aliClient) UploadFile(ctx context.Context, bucket, object string, fileP
 	if bucket == "" {
 		bucket = c.bucket
 	}
+	if c.cli == nil {
+		return errors.ErrClientNotInitialized
+	}
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
 		return err
 	}
@@ -70,6 +74,9 @@ func (c *aliClient) UploadFromReader(ctx context.Context, bucket, object string,
 	if bucket == "" {
 		bucket = c.bucket
 	}
+	if c.cli == nil {
+		return errors.ErrClientNotInitialized
+	}
 	bkt, err := c.cli.Bucket(bucket)
 	if err != nil {
 		return err
@@ -80,6 +87,9 @@ func (c *aliClient) UploadFromReader(ctx context.Context, bucket, object string,
 func (c *aliClient) Download(ctx context.Context, bucket, object string) ([]byte, error) {
 	if bucket == "" {
 		bucket = c.bucket
+	}
+	if c.cli == nil {
+		return nil, errors.ErrClientNotInitialized
 	}
 	bkt, err := c.cli.Bucket(bucket)
 	if err != nil {
@@ -96,15 +106,22 @@ func (c *aliClient) DownloadFile(ctx context.Context, bucket, object string, fil
 	if bucket == "" {
 		bucket = c.bucket
 	}
+	if c.cli == nil {
+		return errors.ErrClientNotInitialized
+	}
 	bkt, err := c.cli.Bucket(bucket)
 	if err != nil {
 		return err
 	}
 	return bkt.GetObjectToFile(object, filePath)
 }
+
 func (c *aliClient) DownloadTo(ctx context.Context, bucket, object string, w io.Writer) error {
 	if bucket == "" {
 		bucket = c.bucket
+	}
+	if c.cli == nil {
+		return errors.ErrClientNotInitialized
 	}
 	bkt, err := c.cli.Bucket(bucket)
 	if err != nil {
@@ -121,6 +138,9 @@ func (c *aliClient) DownloadTo(ctx context.Context, bucket, object string, w io.
 func (c *aliClient) ListObjects(ctx context.Context, bucket, prefix string) ([]string, error) {
 	if bucket == "" {
 		bucket = c.bucket
+	}
+	if c.cli == nil {
+		return nil, errors.ErrClientNotInitialized
 	}
 	bkt, err := c.cli.Bucket(bucket)
 	if err != nil {
@@ -145,6 +165,12 @@ func (c *aliClient) ListObjects(ctx context.Context, bucket, prefix string) ([]s
 }
 
 func (c *aliClient) EnsureBucketExists(ctx context.Context, bucket string) error {
+	if bucket == "" {
+		bucket = c.bucket
+	}
+	if c.cli == nil {
+		return errors.ErrClientNotInitialized
+	}
 	exist, err := c.cli.IsBucketExist(bucket)
 	if err != nil {
 		return fmt.Errorf("check bucket exist: %w", err)
@@ -159,6 +185,9 @@ func (c *aliClient) EnsureBucketExists(ctx context.Context, bucket string) error
 func (c *aliClient) GetObjectInfo(ctx context.Context, bucket, object string) (*ossclient.ObjectInfo, error) {
 	if bucket == "" {
 		bucket = c.bucket
+	}
+	if c.cli == nil {
+		return nil, errors.ErrClientNotInitialized
 	}
 	bkt, err := c.cli.Bucket(bucket)
 	if err != nil {
@@ -186,9 +215,26 @@ func (c *aliClient) DeleteObject(ctx context.Context, bucket, object string) err
 	if bucket == "" {
 		bucket = c.bucket
 	}
+	if c.cli == nil {
+		return errors.ErrClientNotInitialized
+	}
 	bkt, err := c.cli.Bucket(bucket)
 	if err != nil {
 		return err
 	}
 	return bkt.DeleteObject(object)
+}
+
+func (c *aliClient) ObjectExists(ctx context.Context, bucket, object string) (bool, error) {
+	if bucket == "" {
+		bucket = c.bucket
+	}
+	if c.cli == nil {
+		return false, errors.ErrClientNotInitialized
+	}
+	bkt, err := c.cli.Bucket(bucket)
+	if err != nil {
+		return false, err
+	}
+	return bkt.IsObjectExist(object)
 }

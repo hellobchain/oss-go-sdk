@@ -18,6 +18,7 @@ type OssClient interface {
 	GetObjectInfo(ctx context.Context, bucket, object string) (*ObjectInfo, error)
 	DeleteObject(ctx context.Context, bucket, object string) error
 	SetBucket(bucket string)
+	ObjectExists(ctx context.Context, bucket, object string) (bool, error)
 }
 
 /*---------- 空选项占位 ----------*/

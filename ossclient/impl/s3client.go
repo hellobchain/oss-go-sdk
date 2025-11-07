@@ -9,9 +9,11 @@ import (
 	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/hellobchain/oss-go-sdk/common/errors"
 	"github.com/hellobchain/oss-go-sdk/ossclient"
 )
 
@@ -54,6 +56,9 @@ func (c *s3Client) Upload(ctx context.Context, bucket, object string, data []byt
 	if bucket == "" {
 		bucket = c.bucket
 	}
+	if c.svc == nil {
+		return errors.ErrClientNotInitialized
+	}
 	_, err := c.svc.PutObjectWithContext(ctx, &s3.PutObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(object),
@@ -66,6 +71,9 @@ func (c *s3Client) Upload(ctx context.Context, bucket, object string, data []byt
 func (c *s3Client) DownloadFile(ctx context.Context, bucket string, object string, filePath string) error {
 	if bucket == "" {
 		bucket = c.bucket
+	}
+	if c.svc == nil {
+		return errors.ErrClientNotInitialized
 	}
 	out, err := c.svc.GetObjectWithContext(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(bucket),
@@ -93,6 +101,9 @@ func (c *s3Client) UploadFile(ctx context.Context, bucket string, object string,
 	if bucket == "" {
 		bucket = c.bucket
 	}
+	if c.svc == nil {
+		return errors.ErrClientNotInitialized
+	}
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
 		return err
 	}
@@ -114,6 +125,9 @@ func (c *s3Client) UploadFromReader(ctx context.Context, bucket string, object s
 	if bucket == "" {
 		bucket = c.bucket
 	}
+	if c.svc == nil {
+		return errors.ErrClientNotInitialized
+	}
 	_, err := c.svc.PutObjectWithContext(ctx, &s3.PutObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(object),
@@ -124,6 +138,9 @@ func (c *s3Client) UploadFromReader(ctx context.Context, bucket string, object s
 func (c *s3Client) Download(ctx context.Context, bucket, object string) ([]byte, error) {
 	if bucket == "" {
 		bucket = c.bucket
+	}
+	if c.svc == nil {
+		return nil, errors.ErrClientNotInitialized
 	}
 	out, err := c.svc.GetObjectWithContext(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(bucket),
@@ -139,6 +156,9 @@ func (c *s3Client) DownloadTo(ctx context.Context, bucket, object string, w io.W
 	if bucket == "" {
 		bucket = c.bucket
 	}
+	if c.svc == nil {
+		return errors.ErrClientNotInitialized
+	}
 	out, err := c.svc.GetObjectWithContext(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(object),
@@ -153,6 +173,9 @@ func (c *s3Client) DownloadTo(ctx context.Context, bucket, object string, w io.W
 func (c *s3Client) ListObjects(ctx context.Context, bucket, prefix string) ([]string, error) {
 	if bucket == "" {
 		bucket = c.bucket
+	}
+	if c.svc == nil {
+		return nil, errors.ErrClientNotInitialized
 	}
 	var keys []string
 	err := c.svc.ListObjectsPagesWithContext(ctx, &s3.ListObjectsInput{
@@ -171,6 +194,9 @@ func (c *s3Client) EnsureBucketExists(ctx context.Context, bucket string) error 
 	if bucket == "" {
 		bucket = c.bucket
 	}
+	if c.svc == nil {
+		return errors.ErrClientNotInitialized
+	}
 	// 先判断
 	_, err := c.svc.HeadBucketWithContext(ctx, &s3.HeadBucketInput{Bucket: aws.String(bucket)})
 	if err == nil {
@@ -186,6 +212,9 @@ func (c *s3Client) EnsureBucketExists(ctx context.Context, bucket string) error 
 func (c *s3Client) GetObjectInfo(ctx context.Context, bucket, object string) (*ossclient.ObjectInfo, error) {
 	if bucket == "" {
 		bucket = c.bucket
+	}
+	if c.svc == nil {
+		return nil, errors.ErrClientNotInitialized
 	}
 	head, err := c.svc.HeadObjectWithContext(ctx, &s3.HeadObjectInput{
 		Bucket: aws.String(bucket),
@@ -206,9 +235,33 @@ func (c *s3Client) DeleteObject(ctx context.Context, bucket, object string) erro
 	if bucket == "" {
 		bucket = c.bucket
 	}
+	if c.svc == nil {
+		return errors.ErrClientNotInitialized
+	}
 	_, err := c.svc.DeleteObjectWithContext(ctx, &s3.DeleteObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(object),
 	})
 	return err
+}
+
+func (c *s3Client) ObjectExists(ctx context.Context, bucket, object string) (bool, error) {
+	if bucket == "" {
+		bucket = c.bucket
+	}
+	if c.svc == nil {
+		return false, errors.ErrClientNotInitialized
+	}
+	_, err := c.svc.HeadObjectWithContext(ctx, &s3.HeadObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(object),
+	})
+	if err != nil {
+		// AWS 返回 404 表示不存在
+		if aerr, ok := err.(awserr.Error); ok && aerr.Code() == "NotFound" {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }
