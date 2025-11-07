@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -14,6 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/hellobchain/oss-go-sdk/common/errors"
+	"github.com/hellobchain/oss-go-sdk/common/models"
 	"github.com/hellobchain/oss-go-sdk/ossclient"
 )
 
@@ -28,14 +30,27 @@ func (c *s3Client) SetBucket(bucket string) {
 	c.bucket = bucket
 }
 
-func NewS3Client(accessKey, secretKey, endpoint, region, bucket string) (ossclient.OssClient, error) {
+func NewS3Client(clientConfig *models.Config) (ossclient.OssClient, error) {
+	if clientConfig.Endpoint == "" || clientConfig.AccessKeyID == "" || clientConfig.SecretAccessKey == "" {
+		return nil, errors.ErrInvalidConfig
+	}
 	// 自动识别 PathStyle
+	endpoint := ""
+	if clientConfig.UseSSL {
+		endpoint = "https://" + clientConfig.Endpoint
+	} else {
+		endpoint = "http://" + clientConfig.Endpoint
+	}
+	if clientConfig.Region == "" {
+		clientConfig.Region = "us-east-1"
+	}
+
 	u, _ := url.Parse(endpoint)
 	pathStyle := strings.Contains(u.Host, "localhost") || strings.Contains(u.Host, "127.0.0.1")
 	sess, err := session.NewSession(&aws.Config{
-		Region:           aws.String(region),
+		Region:           aws.String(clientConfig.Region),
 		Endpoint:         aws.String(endpoint),
-		Credentials:      credentials.NewStaticCredentials(accessKey, secretKey, ""),
+		Credentials:      credentials.NewStaticCredentials(clientConfig.AccessKeyID, clientConfig.SecretAccessKey, ""),
 		S3ForcePathStyle: aws.Bool(pathStyle),
 		DisableSSL:       aws.Bool(u.Scheme == "http"),
 	})
@@ -43,16 +58,16 @@ func NewS3Client(accessKey, secretKey, endpoint, region, bucket string) (ossclie
 		return nil, err
 	}
 	svc := s3.New(sess)
-	s3Client := &s3Client{svc: svc, bucket: bucket}
-	if bucket != "" {
-		if s3Client.EnsureBucketExists(context.Background(), bucket) != nil {
+	s3Client := &s3Client{svc: svc, bucket: clientConfig.BucketName}
+	if clientConfig.BucketName != "" {
+		if s3Client.EnsureBucketExists(context.Background(), clientConfig.BucketName) != nil {
 			return nil, err
 		}
 	}
 	return s3Client, nil
 }
 
-func (c *s3Client) Upload(ctx context.Context, bucket, object string, data []byte, _ ...ossclient.UploadOpt) error {
+func (c *s3Client) Upload(ctx context.Context, bucket, object string, data []byte, _ ...models.UploadOptions) error {
 	if bucket == "" {
 		bucket = c.bucket
 	}
@@ -97,7 +112,7 @@ func (c *s3Client) DownloadFile(ctx context.Context, bucket string, object strin
 }
 
 // UploadFile implements ossclient.OssClient.
-func (c *s3Client) UploadFile(ctx context.Context, bucket string, object string, filePath string, _ ...ossclient.UploadOpt) error {
+func (c *s3Client) UploadFile(ctx context.Context, bucket string, object string, filePath string, _ ...models.UploadOptions) error {
 	if bucket == "" {
 		bucket = c.bucket
 	}
@@ -121,7 +136,7 @@ func (c *s3Client) UploadFile(ctx context.Context, bucket string, object string,
 }
 
 // UploadFromReader implements ossclient.OssClient.
-func (c *s3Client) UploadFromReader(ctx context.Context, bucket string, object string, reader io.Reader, _ ...ossclient.UploadOpt) error {
+func (c *s3Client) UploadFromReader(ctx context.Context, bucket string, object string, reader io.Reader, _ ...models.UploadOptions) error {
 	if bucket == "" {
 		bucket = c.bucket
 	}
@@ -209,7 +224,7 @@ func (c *s3Client) EnsureBucketExists(ctx context.Context, bucket string) error 
 	return err
 }
 
-func (c *s3Client) GetObjectInfo(ctx context.Context, bucket, object string) (*ossclient.ObjectInfo, error) {
+func (c *s3Client) GetObjectInfo(ctx context.Context, bucket, object string) (*models.ObjectInfo, error) {
 	if bucket == "" {
 		bucket = c.bucket
 	}
@@ -223,11 +238,38 @@ func (c *s3Client) GetObjectInfo(ctx context.Context, bucket, object string) (*o
 	if err != nil {
 		return nil, err
 	}
-	return &ossclient.ObjectInfo{
+	var size int64
+	if head.ContentLength != nil {
+		size = *head.ContentLength
+	}
+	var lastModified string
+	if head.LastModified != nil {
+		lastModified = (*head.LastModified).Format(time.DateTime)
+	}
+	var contentType string
+	if head.ContentType != nil {
+		contentType = *head.ContentType
+	}
+	var userMetadata map[string]string
+	if head.Metadata != nil {
+		for k, v := range head.Metadata {
+			if v == nil {
+				continue
+			}
+			userMetadata[k] = *v
+		}
+	}
+	var etag string
+	if head.ETag != nil {
+		etag = strings.Trim(*head.ETag, `"`)
+	}
+	return &models.ObjectInfo{
 		Key:          object,
-		Size:         *head.ContentLength,
-		LastModified: *head.LastModified,
-		ETag:         strings.Trim(*head.ETag, `"`),
+		Size:         size,
+		LastModified: lastModified,
+		ETag:         etag,
+		ContentType:  contentType,
+		UserMetadata: userMetadata,
 	}, nil
 }
 

@@ -5,13 +5,13 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"strconv"
 	"strings"
 
 	"github.com/aliyun/aliyun-oss-go-sdk/oss"
 	"github.com/hellobchain/oss-go-sdk/common/errors"
+	"github.com/hellobchain/oss-go-sdk/common/models"
 	"github.com/hellobchain/oss-go-sdk/ossclient"
 )
 
@@ -26,24 +26,33 @@ func (c *aliClient) SetBucket(bucket string) {
 	c.bucket = bucket
 }
 
-func NewAliClient(accessKey, secretKey, endpoint, region, bucket string) (ossclient.OssClient, error) {
-	cli, err := oss.New(endpoint, accessKey, secretKey)
+func NewAliClient(clientConfig *models.Config) (ossclient.OssClient, error) {
+	if clientConfig.Endpoint == "" || clientConfig.AccessKeyID == "" || clientConfig.SecretAccessKey == "" {
+		return nil, errors.ErrInvalidConfig
+	}
+	endpoint := ""
+	if clientConfig.UseSSL {
+		endpoint = "https://" + clientConfig.Endpoint
+	} else {
+		endpoint = "http://" + clientConfig.Endpoint
+	}
+	cli, err := oss.New(endpoint, clientConfig.AccessKeyID, clientConfig.SecretAccessKey, oss.InsecureSkipVerify(!clientConfig.UseSSL))
 	if err != nil {
 		return nil, err
 	}
-	if region == "" {
-		cli.SetRegion(region)
+	if clientConfig.Region == "" {
+		cli.SetRegion(clientConfig.Region)
 	}
-	aliClient := &aliClient{cli: cli, bucket: bucket}
-	if bucket != "" {
-		if aliClient.EnsureBucketExists(context.Background(), bucket) != nil {
+	aliClient := &aliClient{cli: cli, bucket: clientConfig.BucketName}
+	if clientConfig.BucketName != "" {
+		if aliClient.EnsureBucketExists(context.Background(), clientConfig.BucketName) != nil {
 			return nil, err
 		}
 	}
 	return aliClient, nil
 }
 
-func (c *aliClient) Upload(ctx context.Context, bucket, object string, data []byte, _ ...ossclient.UploadOpt) error {
+func (c *aliClient) Upload(ctx context.Context, bucket, object string, data []byte, _ ...models.UploadOptions) error {
 	if bucket == "" {
 		bucket = c.bucket
 	}
@@ -54,7 +63,7 @@ func (c *aliClient) Upload(ctx context.Context, bucket, object string, data []by
 	return bkt.PutObject(object, bytes.NewReader(data))
 }
 
-func (c *aliClient) UploadFile(ctx context.Context, bucket, object string, filePath string, _ ...ossclient.UploadOpt) error {
+func (c *aliClient) UploadFile(ctx context.Context, bucket, object string, filePath string, _ ...models.UploadOptions) error {
 	if bucket == "" {
 		bucket = c.bucket
 	}
@@ -70,7 +79,7 @@ func (c *aliClient) UploadFile(ctx context.Context, bucket, object string, fileP
 	}
 	return bkt.PutObjectFromFile(object, filePath)
 }
-func (c *aliClient) UploadFromReader(ctx context.Context, bucket, object string, reader io.Reader, _ ...ossclient.UploadOpt) error {
+func (c *aliClient) UploadFromReader(ctx context.Context, bucket, object string, reader io.Reader, _ ...models.UploadOptions) error {
 	if bucket == "" {
 		bucket = c.bucket
 	}
@@ -182,7 +191,7 @@ func (c *aliClient) EnsureBucketExists(ctx context.Context, bucket string) error
 	return c.cli.CreateBucket(bucket, oss.ACL(oss.ACLPrivate))
 }
 
-func (c *aliClient) GetObjectInfo(ctx context.Context, bucket, object string) (*ossclient.ObjectInfo, error) {
+func (c *aliClient) GetObjectInfo(ctx context.Context, bucket, object string) (*models.ObjectInfo, error) {
 	if bucket == "" {
 		bucket = c.bucket
 	}
@@ -202,12 +211,12 @@ func (c *aliClient) GetObjectInfo(ctx context.Context, bucket, object string) (*
 	lm := meta.Get("Last-Modified")
 	etag := meta.Get("ETag")
 	sz, _ := strconv.ParseInt(size, 10, 64)
-	modTime, _ := http.ParseTime(lm)
-	return &ossclient.ObjectInfo{
+	return &models.ObjectInfo{
 		Key:          object,
 		Size:         sz,
-		LastModified: modTime,
+		LastModified: lm,
 		ETag:         strings.Trim(etag, `"`),
+		ContentType:  meta.Get("Content-Type"),
 	}, nil
 }
 
