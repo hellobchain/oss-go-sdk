@@ -5,7 +5,6 @@ type Config struct {
 	Endpoint        string // MinIO服务器地址，格式: hostname:port
 	AccessKeyID     string // 访问密钥ID
 	SecretAccessKey string // 秘密访问密钥
-	UseSSL          bool   // 是否使用SSL
 	BucketName      string // 默认存储桶名称
 	Region          string // 区域，MinIO通常使用"us-east-1"
 }

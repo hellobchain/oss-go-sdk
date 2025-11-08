@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -30,13 +31,11 @@ func NewAliClient(clientConfig *models.Config) (ossclient.OssClient, error) {
 	if clientConfig.Endpoint == "" || clientConfig.AccessKeyID == "" || clientConfig.SecretAccessKey == "" {
 		return nil, errors.ErrInvalidConfig
 	}
-	endpoint := ""
-	if clientConfig.UseSSL {
-		endpoint = "https://" + clientConfig.Endpoint
-	} else {
-		endpoint = "http://" + clientConfig.Endpoint
+	_, err := url.Parse(clientConfig.Endpoint)
+	if err != nil {
+		return nil, err
 	}
-	cli, err := oss.New(endpoint, clientConfig.AccessKeyID, clientConfig.SecretAccessKey, oss.InsecureSkipVerify(!clientConfig.UseSSL))
+	cli, err := oss.New(clientConfig.Endpoint, clientConfig.AccessKeyID, clientConfig.SecretAccessKey, oss.InsecureSkipVerify(true))
 	if err != nil {
 		return nil, err
 	}

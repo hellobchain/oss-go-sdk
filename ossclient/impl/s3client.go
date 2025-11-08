@@ -35,21 +35,18 @@ func NewS3Client(clientConfig *models.Config) (ossclient.OssClient, error) {
 		return nil, errors.ErrInvalidConfig
 	}
 	// 自动识别 PathStyle
-	endpoint := ""
-	if clientConfig.UseSSL {
-		endpoint = "https://" + clientConfig.Endpoint
-	} else {
-		endpoint = "http://" + clientConfig.Endpoint
-	}
 	if clientConfig.Region == "" {
 		clientConfig.Region = "us-east-1"
 	}
 
-	u, _ := url.Parse(endpoint)
+	u, err := url.Parse(clientConfig.Endpoint)
+	if err != nil {
+		return nil, err
+	}
 	pathStyle := strings.Contains(u.Host, "localhost") || strings.Contains(u.Host, "127.0.0.1")
 	sess, err := session.NewSession(&aws.Config{
 		Region:           aws.String(clientConfig.Region),
-		Endpoint:         aws.String(endpoint),
+		Endpoint:         aws.String(clientConfig.Endpoint),
 		Credentials:      credentials.NewStaticCredentials(clientConfig.AccessKeyID, clientConfig.SecretAccessKey, ""),
 		S3ForcePathStyle: aws.Bool(pathStyle),
 		DisableSSL:       aws.Bool(u.Scheme == "http"),
