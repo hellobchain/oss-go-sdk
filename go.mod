@@ -1,6 +1,6 @@
 module github.com/hellobchain/oss-go-sdk
 
-go 1.20.0
+go 1.20
 
 require (
 	github.com/aliyun/aliyun-oss-go-sdk v3.0.2+incompatible

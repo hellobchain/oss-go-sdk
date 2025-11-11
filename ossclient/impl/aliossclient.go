@@ -44,7 +44,8 @@ func NewAliClient(clientConfig *models.Config) (ossclient.OssClient, error) {
 	}
 	aliClient := &aliClient{cli: cli, bucket: clientConfig.BucketName}
 	if clientConfig.BucketName != "" {
-		if aliClient.EnsureBucketExists(context.Background(), clientConfig.BucketName) != nil {
+		err = aliClient.EnsureBucketExists(context.Background(), clientConfig.BucketName)
+		if err != nil {
 			return nil, err
 		}
 	}

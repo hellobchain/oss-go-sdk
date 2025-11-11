@@ -57,7 +57,8 @@ func NewS3Client(clientConfig *models.Config) (ossclient.OssClient, error) {
 	svc := s3.New(sess)
 	s3Client := &s3Client{svc: svc, bucket: clientConfig.BucketName}
 	if clientConfig.BucketName != "" {
-		if s3Client.EnsureBucketExists(context.Background(), clientConfig.BucketName) != nil {
+		err = s3Client.EnsureBucketExists(context.Background(), clientConfig.BucketName)
+		if err != nil {
 			return nil, err
 		}
 	}
