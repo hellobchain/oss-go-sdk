@@ -248,7 +248,7 @@ func (c *s3Client) GetObjectInfo(ctx context.Context, bucket, object string) (*m
 	if head.ContentType != nil {
 		contentType = *head.ContentType
 	}
-	var userMetadata map[string]string
+	userMetadata := make(map[string]string)
 	if head.Metadata != nil {
 		for k, v := range head.Metadata {
 			if v == nil {
