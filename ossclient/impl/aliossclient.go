@@ -20,6 +20,12 @@ import (
 type aliClient struct {
 	cli    *oss.Client
 	bucket string
+	logger ossclient.Logger
+}
+
+// SetLogger implements ossclient.OssClient.
+func (c *aliClient) SetLogger(logger ossclient.Logger) {
+	c.logger = logger
 }
 
 // SetBucket implements ossclient.OssClient.
@@ -28,24 +34,30 @@ func (c *aliClient) SetBucket(bucket string) {
 }
 
 func NewAliClient(clientConfig *models.Config) (ossclient.OssClient, error) {
+	aliClient := &aliClient{logger: &ossclient.DefaultLogger{}}
 	if clientConfig.Endpoint == "" || clientConfig.AccessKeyID == "" || clientConfig.SecretAccessKey == "" {
+		aliClient.logger.Print("invalid configuration")
 		return nil, errors.ErrInvalidConfig
 	}
 	_, err := url.Parse(clientConfig.Endpoint)
 	if err != nil {
+		aliClient.logger.Print("invalid endpoint", clientConfig.Endpoint)
 		return nil, err
 	}
 	cli, err := oss.New(clientConfig.Endpoint, clientConfig.AccessKeyID, clientConfig.SecretAccessKey, oss.InsecureSkipVerify(true))
 	if err != nil {
+		aliClient.logger.Print("failed to create oss client", err)
 		return nil, err
 	}
 	if clientConfig.Region == "" {
 		cli.SetRegion(clientConfig.Region)
 	}
-	aliClient := &aliClient{cli: cli, bucket: clientConfig.BucketName}
+	aliClient.bucket = clientConfig.BucketName
+	aliClient.cli = cli
 	if clientConfig.BucketName != "" {
 		err = aliClient.EnsureBucketExists(context.Background(), clientConfig.BucketName)
 		if err != nil {
+			aliClient.logger.Print("failed to create ali client", err)
 			return nil, err
 		}
 	}
@@ -58,6 +70,7 @@ func (c *aliClient) Upload(ctx context.Context, bucket, object string, data []by
 	}
 	bkt, err := c.cli.Bucket(bucket)
 	if err != nil {
+		c.logger.Print("failed to get bucket", err)
 		return err
 	}
 	return bkt.PutObject(object, bytes.NewReader(data))
@@ -68,13 +81,16 @@ func (c *aliClient) UploadFile(ctx context.Context, bucket, object string, fileP
 		bucket = c.bucket
 	}
 	if c.cli == nil {
+		c.logger.Print("client not initialized")
 		return errors.ErrClientNotInitialized
 	}
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		c.logger.Print("file does not exist", err)
 		return err
 	}
 	bkt, err := c.cli.Bucket(bucket)
 	if err != nil {
+		c.logger.Print("bucket does not exist", err)
 		return err
 	}
 	return bkt.PutObjectFromFile(object, filePath)
@@ -84,10 +100,12 @@ func (c *aliClient) UploadFromReader(ctx context.Context, bucket, object string,
 		bucket = c.bucket
 	}
 	if c.cli == nil {
+		c.logger.Print("oss client not initialized")
 		return errors.ErrClientNotInitialized
 	}
 	bkt, err := c.cli.Bucket(bucket)
 	if err != nil {
+		c.logger.Print("bucket does not exist", err)
 		return err
 	}
 	return bkt.PutObject(object, reader)
@@ -98,14 +116,17 @@ func (c *aliClient) Download(ctx context.Context, bucket, object string) ([]byte
 		bucket = c.bucket
 	}
 	if c.cli == nil {
+		c.logger.Print("oss client not initialized")
 		return nil, errors.ErrClientNotInitialized
 	}
 	bkt, err := c.cli.Bucket(bucket)
 	if err != nil {
+		c.logger.Print("bucket does not exist", err)
 		return nil, err
 	}
 	out, err := bkt.GetObject(object)
 	if err != nil {
+		c.logger.Print("object does not exist", err)
 		return nil, err
 	}
 	defer out.Close()
@@ -116,10 +137,12 @@ func (c *aliClient) DownloadFile(ctx context.Context, bucket, object string, fil
 		bucket = c.bucket
 	}
 	if c.cli == nil {
+		c.logger.Print("client not initialized")
 		return errors.ErrClientNotInitialized
 	}
 	bkt, err := c.cli.Bucket(bucket)
 	if err != nil {
+		c.logger.Print("bucket does not exist", err)
 		return err
 	}
 	return bkt.GetObjectToFile(object, filePath)
@@ -130,14 +153,17 @@ func (c *aliClient) DownloadTo(ctx context.Context, bucket, object string, w io.
 		bucket = c.bucket
 	}
 	if c.cli == nil {
+		c.logger.Print("client not initialized")
 		return errors.ErrClientNotInitialized
 	}
 	bkt, err := c.cli.Bucket(bucket)
 	if err != nil {
+		c.logger.Print("bucket does not exist", err)
 		return err
 	}
 	rc, err := bkt.GetObject(object)
 	if err != nil {
+		c.logger.Print("object does not exist", err)
 		return err
 	}
 	defer rc.Close()
@@ -149,10 +175,12 @@ func (c *aliClient) ListObjects(ctx context.Context, bucket, prefix string) ([]s
 		bucket = c.bucket
 	}
 	if c.cli == nil {
+
 		return nil, errors.ErrClientNotInitialized
 	}
 	bkt, err := c.cli.Bucket(bucket)
 	if err != nil {
+		c.logger.Print("bucket does not exist", err)
 		return nil, err
 	}
 	marker := ""
@@ -160,6 +188,7 @@ func (c *aliClient) ListObjects(ctx context.Context, bucket, prefix string) ([]s
 	for {
 		lr, err := bkt.ListObjects(oss.Prefix(prefix), oss.Marker(marker))
 		if err != nil {
+			c.logger.Print("list objects failed", err)
 			return nil, err
 		}
 		for _, o := range lr.Objects {

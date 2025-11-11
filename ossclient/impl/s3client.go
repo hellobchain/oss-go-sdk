@@ -23,6 +23,12 @@ import (
 type s3Client struct {
 	svc    *s3.S3
 	bucket string
+	logger ossclient.Logger
+}
+
+// SetLogger implements ossclient.OssClient.
+func (c *s3Client) SetLogger(logger ossclient.Logger) {
+	c.logger = logger
 }
 
 // SetBucket implements ossclient.OssClient.
@@ -31,7 +37,9 @@ func (c *s3Client) SetBucket(bucket string) {
 }
 
 func NewS3Client(clientConfig *models.Config) (ossclient.OssClient, error) {
+	s3Client := &s3Client{logger: &ossclient.DefaultLogger{}}
 	if clientConfig.Endpoint == "" || clientConfig.AccessKeyID == "" || clientConfig.SecretAccessKey == "" {
+		s3Client.logger.Print("endpoint:", clientConfig.Endpoint)
 		return nil, errors.ErrInvalidConfig
 	}
 	// 自动识别 PathStyle
@@ -41,24 +49,28 @@ func NewS3Client(clientConfig *models.Config) (ossclient.OssClient, error) {
 
 	u, err := url.Parse(clientConfig.Endpoint)
 	if err != nil {
+		s3Client.logger.Print("invalid endpoint", clientConfig.Endpoint)
 		return nil, err
 	}
-	pathStyle := strings.Contains(u.Host, "localhost") || strings.Contains(u.Host, "127.0.0.1")
-	sess, err := session.NewSession(&aws.Config{
+	sessionConfig := &aws.Config{
 		Region:           aws.String(clientConfig.Region),
 		Endpoint:         aws.String(clientConfig.Endpoint),
 		Credentials:      credentials.NewStaticCredentials(clientConfig.AccessKeyID, clientConfig.SecretAccessKey, ""),
-		S3ForcePathStyle: aws.Bool(pathStyle),
+		S3ForcePathStyle: aws.Bool(!clientConfig.IsS3),
 		DisableSSL:       aws.Bool(u.Scheme == "http"),
-	})
+	}
+	sess, err := session.NewSession(sessionConfig)
 	if err != nil {
+		s3Client.logger.Print("Error creating session: %v", err)
 		return nil, err
 	}
 	svc := s3.New(sess)
-	s3Client := &s3Client{svc: svc, bucket: clientConfig.BucketName}
+	s3Client.bucket = clientConfig.BucketName
+	s3Client.svc = svc
 	if clientConfig.BucketName != "" {
 		err = s3Client.EnsureBucketExists(context.Background(), clientConfig.BucketName)
 		if err != nil {
+			s3Client.logger.Print("failed to ensure bucket exists", err)
 			return nil, err
 		}
 	}
@@ -70,6 +82,7 @@ func (c *s3Client) Upload(ctx context.Context, bucket, object string, data []byt
 		bucket = c.bucket
 	}
 	if c.svc == nil {
+		c.logger.Print("invalid configuration")
 		return errors.ErrClientNotInitialized
 	}
 	_, err := c.svc.PutObjectWithContext(ctx, &s3.PutObjectInput{
@@ -77,7 +90,11 @@ func (c *s3Client) Upload(ctx context.Context, bucket, object string, data []byt
 		Key:    aws.String(object),
 		Body:   bytes.NewReader(data),
 	})
-	return err
+	if err != nil {
+		c.logger.Print("failed to upload file", err)
+		return err
+	}
+	return nil
 }
 
 // DownloadFile implements ossclient.OssClient.
@@ -86,6 +103,7 @@ func (c *s3Client) DownloadFile(ctx context.Context, bucket string, object strin
 		bucket = c.bucket
 	}
 	if c.svc == nil {
+		c.logger.Print("client not initialized")
 		return errors.ErrClientNotInitialized
 	}
 	out, err := c.svc.GetObjectWithContext(ctx, &s3.GetObjectInput{
@@ -93,17 +111,20 @@ func (c *s3Client) DownloadFile(ctx context.Context, bucket string, object strin
 		Key:    aws.String(object),
 	})
 	if err != nil {
+		c.logger.Print("GetObjectWithContext failed")
 		return err
 	}
 	defer out.Body.Close()
 	fd, err := os.OpenFile(filePath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, os.FileMode(0664))
 	if err != nil {
+		c.logger.Print("failed to open file", filePath)
 		return err
 	}
 	// Copy the data to the local file path.
 	_, err = io.Copy(fd, out.Body)
 	fd.Close()
 	if err != nil {
+		c.logger.Print("failed to write file", filePath)
 		return err
 	}
 	return nil
@@ -115,6 +136,7 @@ func (c *s3Client) UploadFile(ctx context.Context, bucket string, object string,
 		bucket = c.bucket
 	}
 	if c.svc == nil {
+		c.logger.Print("client not initialized")
 		return errors.ErrClientNotInitialized
 	}
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
@@ -208,6 +230,7 @@ func (c *s3Client) EnsureBucketExists(ctx context.Context, bucket string) error 
 		bucket = c.bucket
 	}
 	if c.svc == nil {
+		c.logger.Print("s3 client not initialized")
 		return errors.ErrClientNotInitialized
 	}
 	// 先判断
@@ -219,6 +242,10 @@ func (c *s3Client) EnsureBucketExists(ctx context.Context, bucket string) error 
 	_, err = c.svc.CreateBucketWithContext(ctx, &s3.CreateBucketInput{
 		Bucket: aws.String(bucket),
 	})
+	if err != nil {
+		c.logger.Print("create bucket: ", err)
+		return err
+	}
 	return err
 }
 

@@ -20,4 +20,5 @@ type OssClient interface {
 	DeleteObject(ctx context.Context, bucket, object string) error
 	SetBucket(bucket string)
 	ObjectExists(ctx context.Context, bucket, object string) (bool, error)
+	SetLogger(logger Logger)
 }

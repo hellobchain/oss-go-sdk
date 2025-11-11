@@ -7,6 +7,7 @@ type Config struct {
 	SecretAccessKey string // 秘密访问密钥
 	BucketName      string // 默认存储桶名称
 	Region          string // 区域，MinIO通常使用"us-east-1"
+	IsS3            bool   // 是否使用S3兼容API
 }
 
 // UploadOptions 文件上传选项
