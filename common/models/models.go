@@ -8,6 +8,7 @@ type Config struct {
 	BucketName      string // 默认存储桶名称
 	Region          string // 区域，MinIO通常使用"us-east-1"
 	IsS3            bool   // 是否使用S3兼容API
+	Dir             string // 默认本地文件目录存储目录
 }
 
 // UploadOptions 文件上传选项

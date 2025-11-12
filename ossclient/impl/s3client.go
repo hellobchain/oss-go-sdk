@@ -92,7 +92,7 @@ func (c *s3Client) Upload(ctx context.Context, bucket, object string, data []byt
 	})
 	if err != nil {
 		c.logger.Print("failed to upload file", err)
-		return err
+		return errors.ErrUploadFailed
 	}
 	return nil
 }
@@ -140,10 +140,12 @@ func (c *s3Client) UploadFile(ctx context.Context, bucket string, object string,
 		return errors.ErrClientNotInitialized
 	}
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		c.logger.Print("file does not exist", err)
 		return err
 	}
 	fd, err := os.Open(filePath)
 	if err != nil {
+		c.logger.Print("file open failed", err)
 		return err
 	}
 	defer fd.Close()
@@ -152,7 +154,11 @@ func (c *s3Client) UploadFile(ctx context.Context, bucket string, object string,
 		Key:    aws.String(object),
 		Body:   aws.ReadSeekCloser(fd),
 	})
-	return err
+	if err != nil {
+		c.logger.Print("file upload failed", err)
+		return errors.ErrUploadFailed
+	}
+	return nil
 }
 
 // UploadFromReader implements ossclient.OssClient.
@@ -161,6 +167,7 @@ func (c *s3Client) UploadFromReader(ctx context.Context, bucket string, object s
 		bucket = c.bucket
 	}
 	if c.svc == nil {
+		c.logger.Print("oss client not initialized")
 		return errors.ErrClientNotInitialized
 	}
 	_, err := c.svc.PutObjectWithContext(ctx, &s3.PutObjectInput{
@@ -168,13 +175,18 @@ func (c *s3Client) UploadFromReader(ctx context.Context, bucket string, object s
 		Key:    aws.String(object),
 		Body:   aws.ReadSeekCloser(reader),
 	})
-	return err
+	if err != nil {
+		c.logger.Print("upload failed", err)
+		return errors.ErrUploadFailed
+	}
+	return nil
 }
 func (c *s3Client) Download(ctx context.Context, bucket, object string) ([]byte, error) {
 	if bucket == "" {
 		bucket = c.bucket
 	}
 	if c.svc == nil {
+		c.logger.Print("oss client not initialized")
 		return nil, errors.ErrClientNotInitialized
 	}
 	out, err := c.svc.GetObjectWithContext(ctx, &s3.GetObjectInput{
@@ -182,6 +194,7 @@ func (c *s3Client) Download(ctx context.Context, bucket, object string) ([]byte,
 		Key:    aws.String(object),
 	})
 	if err != nil {
+		c.logger.Print("get object failed", err)
 		return nil, err
 	}
 	defer out.Body.Close()
@@ -192,6 +205,7 @@ func (c *s3Client) DownloadTo(ctx context.Context, bucket, object string, w io.W
 		bucket = c.bucket
 	}
 	if c.svc == nil {
+		c.logger.Print("client not initialized")
 		return errors.ErrClientNotInitialized
 	}
 	out, err := c.svc.GetObjectWithContext(ctx, &s3.GetObjectInput{
@@ -199,17 +213,23 @@ func (c *s3Client) DownloadTo(ctx context.Context, bucket, object string, w io.W
 		Key:    aws.String(object),
 	})
 	if err != nil {
+		c.logger.Print("get object failed", err)
 		return err
 	}
 	defer out.Body.Close()
 	_, err = io.Copy(w, out.Body)
-	return err
+	if err != nil {
+		c.logger.Print("failed to write file", err)
+		return err
+	}
+	return nil
 }
 func (c *s3Client) ListObjects(ctx context.Context, bucket, prefix string) ([]string, error) {
 	if bucket == "" {
 		bucket = c.bucket
 	}
 	if c.svc == nil {
+		c.logger.Print("client not initialized")
 		return nil, errors.ErrClientNotInitialized
 	}
 	var keys []string
@@ -222,7 +242,11 @@ func (c *s3Client) ListObjects(ctx context.Context, bucket, prefix string) ([]st
 		}
 		return !last
 	})
-	return keys, err
+	if err != nil {
+		c.logger.Print("list objects failed", err)
+		return nil, err
+	}
+	return keys, nil
 }
 
 func (c *s3Client) EnsureBucketExists(ctx context.Context, bucket string) error {
@@ -246,7 +270,7 @@ func (c *s3Client) EnsureBucketExists(ctx context.Context, bucket string) error 
 		c.logger.Print("create bucket: ", err)
 		return err
 	}
-	return err
+	return nil
 }
 
 func (c *s3Client) GetObjectInfo(ctx context.Context, bucket, object string) (*models.ObjectInfo, error) {
@@ -254,6 +278,7 @@ func (c *s3Client) GetObjectInfo(ctx context.Context, bucket, object string) (*m
 		bucket = c.bucket
 	}
 	if c.svc == nil {
+		c.logger.Print("s3 client not initialized")
 		return nil, errors.ErrClientNotInitialized
 	}
 	head, err := c.svc.HeadObjectWithContext(ctx, &s3.HeadObjectInput{
@@ -261,6 +286,7 @@ func (c *s3Client) GetObjectInfo(ctx context.Context, bucket, object string) (*m
 		Key:    aws.String(object),
 	})
 	if err != nil {
+		c.logger.Print(err)
 		return nil, err
 	}
 	var size int64
@@ -303,13 +329,18 @@ func (c *s3Client) DeleteObject(ctx context.Context, bucket, object string) erro
 		bucket = c.bucket
 	}
 	if c.svc == nil {
+		c.logger.Print("oss client not initialized")
 		return errors.ErrClientNotInitialized
 	}
 	_, err := c.svc.DeleteObjectWithContext(ctx, &s3.DeleteObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(object),
 	})
-	return err
+	if err != nil {
+		c.logger.Print(err)
+		return errors.ErrObjectNotExists
+	}
+	return nil
 }
 
 func (c *s3Client) ObjectExists(ctx context.Context, bucket, object string) (bool, error) {
@@ -317,6 +348,7 @@ func (c *s3Client) ObjectExists(ctx context.Context, bucket, object string) (boo
 		bucket = c.bucket
 	}
 	if c.svc == nil {
+		c.logger.Print("client not initialized")
 		return false, errors.ErrClientNotInitialized
 	}
 	_, err := c.svc.HeadObjectWithContext(ctx, &s3.HeadObjectInput{
@@ -328,6 +360,7 @@ func (c *s3Client) ObjectExists(ctx context.Context, bucket, object string) (boo
 		if aerr, ok := err.(awserr.Error); ok && aerr.Code() == "NotFound" {
 			return false, nil
 		}
+		c.logger.Print(err.Error())
 		return false, err
 	}
 	return true, nil

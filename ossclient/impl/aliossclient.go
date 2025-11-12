@@ -3,7 +3,6 @@ package impl
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"io"
 	"net/url"
 	"os"
@@ -175,7 +174,7 @@ func (c *aliClient) ListObjects(ctx context.Context, bucket, prefix string) ([]s
 		bucket = c.bucket
 	}
 	if c.cli == nil {
-
+		c.logger.Print("client not initialized")
 		return nil, errors.ErrClientNotInitialized
 	}
 	bkt, err := c.cli.Bucket(bucket)
@@ -207,17 +206,24 @@ func (c *aliClient) EnsureBucketExists(ctx context.Context, bucket string) error
 		bucket = c.bucket
 	}
 	if c.cli == nil {
+		c.logger.Print("ali client not initialized")
 		return errors.ErrClientNotInitialized
 	}
 	exist, err := c.cli.IsBucketExist(bucket)
 	if err != nil {
-		return fmt.Errorf("check bucket exist: %w", err)
+		c.logger.Print("check bucket exist failed", err)
+		return err
 	}
 	if exist {
 		return nil
 	}
 	// 创建，ACL 默认私有
-	return c.cli.CreateBucket(bucket, oss.ACL(oss.ACLPrivate))
+	err = c.cli.CreateBucket(bucket, oss.ACL(oss.ACLPrivate))
+	if err != nil {
+		c.logger.Print("create bucket failed", err)
+		return err
+	}
+	return nil
 }
 
 func (c *aliClient) GetObjectInfo(ctx context.Context, bucket, object string) (*models.ObjectInfo, error) {
@@ -225,14 +231,17 @@ func (c *aliClient) GetObjectInfo(ctx context.Context, bucket, object string) (*
 		bucket = c.bucket
 	}
 	if c.cli == nil {
+		c.logger.Print("ali client not initialized")
 		return nil, errors.ErrClientNotInitialized
 	}
 	bkt, err := c.cli.Bucket(bucket)
 	if err != nil {
+		c.logger.Print("get bucket failed", err)
 		return nil, err
 	}
 	meta, err := bkt.GetObjectDetailedMeta(object)
 	if err != nil {
+		c.logger.Print("get object meta failed", err)
 		return nil, err
 	}
 	// 解析头域
@@ -254,13 +263,20 @@ func (c *aliClient) DeleteObject(ctx context.Context, bucket, object string) err
 		bucket = c.bucket
 	}
 	if c.cli == nil {
+		c.logger.Print("oss client not initialized")
 		return errors.ErrClientNotInitialized
 	}
 	bkt, err := c.cli.Bucket(bucket)
 	if err != nil {
+		c.logger.Print("get bucket handle", err)
 		return err
 	}
-	return bkt.DeleteObject(object)
+	err = bkt.DeleteObject(object)
+	if err != nil {
+		c.logger.Print("delete object", err)
+		return err
+	}
+	return nil
 }
 
 func (c *aliClient) ObjectExists(ctx context.Context, bucket, object string) (bool, error) {
@@ -268,11 +284,19 @@ func (c *aliClient) ObjectExists(ctx context.Context, bucket, object string) (bo
 		bucket = c.bucket
 	}
 	if c.cli == nil {
+		c.logger.Print("client not initialized")
 		return false, errors.ErrClientNotInitialized
 	}
 	bkt, err := c.cli.Bucket(bucket)
 	if err != nil {
+		c.logger.Print("get bucket handle", err)
 		return false, err
 	}
-	return bkt.IsObjectExist(object)
+	boolValue, err := bkt.IsObjectExist(object)
+	if err != nil {
+		c.logger.Print("failed to check object exists", object)
+		return false, err
+	}
+	return boolValue, nil
+
 }
