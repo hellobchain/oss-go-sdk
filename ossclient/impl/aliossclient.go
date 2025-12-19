@@ -57,7 +57,7 @@ func NewAliClient(clientConfig *models.Config) (ossclient.OssClient, error) {
 		err = aliClient.EnsureBucketExists(context.Background(), clientConfig.BucketName)
 		if err != nil {
 			aliClient.logger.Print("failed to create ali client", err)
-			return nil, err
+			// return nil, err
 		}
 	}
 	return aliClient, nil
